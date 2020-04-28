@@ -13,9 +13,10 @@
 # limitations under the License.
 
 """
-Script to compare the number of resources matched per-policy, per-region
-between a dryrun and the last actual run of each policy, and write the results
-to a HTML file (to be added as a comment on the PR).
+Script to compare the affected resources matched per-policy, per-region
+between a dryrun and the last actual run of each policy. High-level results
+are written to a Mardown file (to be added as a comment on the PR), Low-level
+differences are written to a HTML file (to be added as a link on the PR).
 """
 
 import sys
@@ -25,8 +26,10 @@ import logging
 import json
 import boto3
 import argparse
+import itertools
 from zlib import decompress
 import subprocess
+import jinja2
 
 from manheim_c7n_tools.utils import set_log_info, set_log_debug
 from manheim_c7n_tools.config import ManheimConfig
@@ -78,6 +81,12 @@ class DryRunDiffer(object):
                 )
             fh.write(diff_md)
         logger.info('PR diff written to: pr_diff.md')
+        diff_report = self._make_diff_report(
+                dryrun_results
+        )
+        with open('pr_report.html', 'w') as fh:
+            fh.write(diff_report)
+        logger.info('PR Diff Report generated!')
 
     def _find_changed_policies(self, git_dir=None, diff_against='master'):
         """
@@ -99,6 +108,67 @@ class DryRunDiffer(object):
                 continue
             pnames.append(m.group(1))
         return pnames
+
+    def _make_diff_report(self, dryrun):
+        """
+        Return a HTML report breaking down the differences between the dryrun
+        (this branch) and the last run of each policy on master.
+
+        :param dryrun: dryrun policy resource information
+        :type dryrun: dict
+        :return: html report
+        :rtype: str
+        """
+        all_policies = list(
+            set(dryrun.keys()) | set(self._live_results.keys())
+        )
+        entries = {}
+        if not all_policies:
+            logger.info('nothing to do here')
+            return
+        for policy in all_policies:
+            for region in self.config.regions:
+                dry_ids = {
+                    x['Arn']
+                    for x in dryrun.get(policy, {}).get(region, [])
+                }
+                live_ids = {
+                    x['Arn']
+                    for x in self._live_results.get(policy, {}).get(region, [])
+                }
+                additions = [
+                    {'id': x, 'type': 'added'}
+                    for x in dry_ids.difference(live_ids)
+                ]
+                removals = [
+                    {'id': x, 'type': 'removed'}
+                    for x in live_ids.difference(dry_ids)
+                ]
+                untouched = [
+                    {'id': x, 'type': 'unchanged'}
+                    for x in dry_ids.intersection(live_ids)
+                ]
+                resources = list(itertools.chain.from_iterable((
+                    additions or [],
+                    removals or [],
+                    untouched or []
+                )))
+                if policy not in entries:
+                    entries[policy] = {}
+                entries[policy][region] = {
+                    'resources': resources,
+                    'total_add': len(additions),
+                    'total_remove': len(removals),
+                    'total_untouch': len(untouched)
+                }
+        t_loader = jinja2.FileSystemLoader(searchpath="./templates/")
+        t_env = jinja2.Environment(loader=t_loader)
+        t_file = "diffreport.j2"
+        tmpl = t_env.get_template(t_file)
+        return tmpl.render(
+            account_name=self.config.account_id,
+            entries=entries
+        )
 
     def _make_diff_markdown(self, dryrun):
         """
@@ -127,10 +197,10 @@ class DryRunDiffer(object):
             res += '%s\n' % ('=' * linelen)
             res += pname + "\n"
             for rname in self.config.regions:
-                a_str = self._live_results.get(pname, {}).get(rname, '--')
-                b_str = dryrun.get(pname, {}).get(rname, '--')
-                a = 0 if a_str == '--' else a_str
-                b = 0 if b_str == '--' else b_str
+                a = len(self._live_results.get(pname, {}).get(rname, []))
+                b = len(dryrun.get(pname, {}).get(rname, []))
+                a_str = '--' if a == 0 else a
+                b_str = '--' if b == 0 else b
                 prefix = ' '
                 diff = ''
                 if a == '--' and b != '--':
@@ -187,7 +257,7 @@ class DryRunDiffer(object):
             except Exception:
                 logger.error('ERROR reading file: %s', f, exc_info=True)
                 continue
-            res[policy][region] = len(resources)
+            res[policy][region] = resources
         logger.debug('Got dryrun results for %d policies', len(res))
         return res
 
@@ -211,7 +281,7 @@ class DryRunDiffer(object):
             if p not in self._live_results:
                 self._live_results[p] = {}
             self._live_results[p][region_name] = \
-                self._get_latest_res_count_for_policy(bkt, p)
+                self._get_latest_res_for_policy(bkt, p)
         logger.debug('Done getting resource counts for %s', region_name)
 
     def _get_s3_policy_prefixes(self, bucket):
@@ -243,7 +313,7 @@ class DryRunDiffer(object):
             result.append(pname['Prefix'].replace('logs/', '').strip('/'))
         return result
 
-    def _get_latest_res_count_for_policy(self, bucket, pol_name):
+    def _get_latest_res_for_policy(self, bucket, pol_name):
         """
         Given the S3 Bucket and a policy name, find the newest
         ``resources.json`` file for that policy and return the count of
@@ -278,7 +348,7 @@ class DryRunDiffer(object):
             body = body.read()
             body = decompress(body, 15 + 32)
         resources = json.loads(body)
-        return len(resources)
+        return resources
 
 
 def parse_args(argv):
@@ -331,7 +401,8 @@ def main():
 
     conf = ManheimConfig.from_file(args.config, args.ACCOUNT_NAME)
     DryRunDiffer(conf).run(
-        git_dir=args.git_dir, diff_against=args.diff_against
+        git_dir=args.git_dir,
+        diff_against=args.diff_against,
     )
 
 

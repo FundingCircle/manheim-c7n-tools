@@ -328,6 +328,7 @@ class DryRunDiffStep(BaseStep):
         logger.info('Nothing to do during normal run.')
 
     def dryrun(self):
+        logger.info('doing something here')
         DryRunDiffer(self.config).run(diff_against='origin/master')
 
     @staticmethod
