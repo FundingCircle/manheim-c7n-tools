@@ -272,3 +272,92 @@ class TestManheimConfig(object):
                 result = conf.config_for_region('us-east-2')
         assert result._config == expected
         assert result.config_path == '/tmp/baz.yml'
+
+    def test_list_tags(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch(
+                '%s.open' % pbm, mock_open(read_data='foo'), create=True
+            ) as m_open:
+                with patch('%s.yaml.load' % pbm, autospec=True) as mock_load:
+                    with patch(
+                        '%s.ManheimConfig' % pbm, autospec=True
+                    ) as mock_conf:
+                        mock_load.return_value = [
+                            {
+                                'account_name': 'a1',
+                                'account_id': '1111',
+                                'tags': ['my_custom_tag1'],
+                                'regions': ['us-east-1']
+                            },
+                            {
+                                'account_name': 'a3',
+                                'account_id': '3333',
+                                'regions': ['eu-west-1']
+                            },
+                            {
+                                'account_name': 'a2',
+                                'account_id': 2222,
+                                'tags': ['my_custom_tag1', 'my_custom_tag2'],
+                                'regions': ['us-east-2']
+                            }
+                        ]
+                        res = ManheimConfig.list_tags('/tmp/conf.yml')
+        assert res == ['my_custom_tag1', 'my_custom_tag2']
+        assert mock_logger.mock_calls == [
+            call.info('Loading config from: %s', '/tmp/conf.yml')
+        ]
+        assert m_open.mock_calls == [
+            call('/tmp/conf.yml', 'r'),
+            call().__enter__(),
+            call().read(),
+            call().__exit__(None, None, None)
+        ]
+        assert mock_load.mock_calls == [
+            call('foo', Loader=yaml.SafeLoader)
+        ]
+        assert mock_conf.mock_calls == []
+
+    def test_account_tags(self):
+        with patch('%s.logger' % pbm, autospec=True) as mock_logger:
+            with patch(
+                '%s.open' % pbm, mock_open(read_data='foo'), create=True
+            ) as m_open:
+                with patch('%s.yaml.load' % pbm, autospec=True) as mock_load:
+                    with patch(
+                        '%s.ManheimConfig' % pbm, autospec=True
+                    ) as mock_conf:
+                        mock_load.return_value = [
+                            {
+                                'account_name': 'a1',
+                                'account_id': '1111',
+                                'tags': ['my_custom_tag1'],
+                                'regions': ['us-east-1']
+                            },
+                            {
+                                'account_name': 'a3',
+                                'account_id': '3333',
+                                'regions': ['eu-west-1']
+                            },
+                            {
+                                'account_name': 'a2',
+                                'account_id': 2222,
+                                'tags': ['my_custom_tag1', 'my_custom_tag2'],
+                                'regions': ['us-east-2']
+                            }
+                        ]
+                        res = ManheimConfig.account_tags('/tmp/conf.yml')
+        assert res == {'a1': ['my_custom_tag1'], 'a2': ['my_custom_tag1', 'my_custom_tag2'], 'a3': []}
+        assert mock_logger.mock_calls == [
+            call.info('Loading config from: %s', '/tmp/conf.yml')
+        ]
+        assert m_open.mock_calls == [
+            call('/tmp/conf.yml', 'r'),
+            call().__enter__(),
+            call().read(),
+            call().__exit__(None, None, None)
+        ]
+        assert mock_load.mock_calls == [
+            call('foo', Loader=yaml.SafeLoader)
+        ]
+        assert mock_conf.mock_calls == []
+

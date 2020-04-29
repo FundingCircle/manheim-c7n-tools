@@ -58,6 +58,8 @@ MANHEIM_CONFIG_SCHEMA = {
         'policy_source_paths': {'type': 'array', 'items': {'type': 'string'}},
         # A list of region names that custodian should run in for this account
         'regions': {'type': 'array', 'items': {'type': 'string'}},
+        # A list of tags that this account will run against
+        'tags': {'type': 'array', 'items': {'type': 'string'}},
         # Name of the S3 bucket for storing Custodian output; should include
         # %%AWS_REGION%%, for buckets in each region
         'output_s3_bucket_name': {'type': 'string'},
@@ -163,6 +165,58 @@ class ManheimConfig(object):
         with open(path, 'r') as fh:
             config_list = yaml.load(fh.read(), Loader=yaml.SafeLoader)
         return {x['account_name']: str(x['account_id']) for x in config_list}
+
+    @staticmethod
+    def list_tags(path):
+        """
+        Given the path to a manheim-c7n-tools YML configuration file, return a
+        distinct list of tags for all accounts defined in the file.
+
+        :param path: path of the yaml config file to load
+        :type path: str
+        :return: list of all tag names
+        :rtype: list
+        """
+        logger.info('Loading config from: %s', path)
+        with open(path, 'r') as fh:
+            config_list = yaml.load(fh.read(), Loader=yaml.SafeLoader)
+
+        all_tags = []
+
+        for x in config_list:
+            if 'tags' in x:
+                for z in x['tags']:
+                    if not z in all_tags:
+                        all_tags.append(z)
+
+        return all_tags
+
+
+    @staticmethod
+    def account_tags(path):
+        """
+        Given the path to a manheim-c7n-tools YML configuration file, return a
+        dict of account name to a list of tag names for each account defined in
+        the file.
+
+        :param path: path of the yaml config file to load
+        :type path: str
+        :return: dict of account name/alias to tag names
+        :rtype: dict
+        """
+        logger.info('Loading config from: %s', path)
+        with open(path, 'r') as fh:
+            config_list = yaml.load(fh.read(), Loader=yaml.SafeLoader)
+
+        account_tags = {}
+        for x in config_list:
+            if 'tags' in x:
+                account_tags[x['account_name']] = x['tags']
+            else:
+                account_tags[x['account_name']] = []
+
+        return account_tags
+
 
     def config_for_region(self, region_name):
         """

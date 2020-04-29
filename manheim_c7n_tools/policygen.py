@@ -178,6 +178,13 @@ class PolicyGen(object):
         :rtype: dict
         """
         acct_configs = {}
+
+        tag_policies = {}
+        for tag in self._config.list_tags(self._config.config_path):
+            tag_policies[tag] = self._read_policy_directory(
+                os.path.join(path, tag)
+            )
+
         # read the shared configs from all_accounts/ ; returns a dict of
         # region name to [dict of policy name to policy], for each region
         all_accts = self._read_policy_directory(
@@ -194,6 +201,9 @@ class PolicyGen(object):
             # for each region, layer per-account over all_accounts
             for rname in self._config.regions:
                 conf[rname].update(acct_conf[rname])
+                for tag in self._config.account_tags(self._config.config_path)[acctname]:
+                    conf[rname].update(tag_policies[tag][rname])
+
             acct_configs[acctname] = deepcopy(conf)
         return acct_configs
 

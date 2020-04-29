@@ -74,9 +74,17 @@ class PolicyGenTester(object):
         type(self.m_conf).mailer_config = PropertyMock(
             return_value={'queue_url': 'MailerUrl'}
         )
+        type(self.m_conf).tags = PropertyMock(
+            return_value=['my_custom_tag']
+        )
         type(self.m_conf).account_name = PropertyMock(return_value='myAccount')
         type(self.m_conf).account_id = PropertyMock(return_value='1234567890')
         self.m_conf.list_accounts.return_value = ['myAccount', 'otherAccount']
+        self.m_conf.list_tags.return_value = ['my_custom_tag']
+        self.m_conf.account_tags.return_value = {
+            'myAccount': ['my_custom_tag'],
+            'otherAccount': []
+        }
         type(self.m_conf).config_path = PropertyMock(
             return_value='/tmp/conf.yml'
         )
@@ -909,6 +917,17 @@ class TestRun(PolicyGenTester):
                     'all_common': 'region3'
                 }
             },
+            'my_custom_tag': {
+                'region1': {
+                    'my_custom_tag_r1': 'region1',
+                },
+                'region2': {
+                    'my_custom_tag_r2': 'region2',
+                },
+                'region3': {
+                    'my_custom_tag_r3': 'region3',
+                }
+            },
             'otherAccount': {
                 'region1': {
                     'foo': 'bar-otherAccount/region1',
@@ -950,6 +969,7 @@ class TestRun(PolicyGenTester):
             mocks['_load_defaults'].return_value = 'DEFAULTS'
             self.cls.run()
         assert mocks['_read_policy_directory'].mock_calls == [
+            call(self.cls, 'my_custom_tag'),
             call(self.cls, 'all_accounts'),
             call(self.cls, 'myAccount'),
             call(self.cls, 'otherAccount')
@@ -962,7 +982,8 @@ class TestRun(PolicyGenTester):
                     'baz': 'blam',
                     'myAccount/common': 'c',
                     'all_r1': 'region1',
-                    'all_common': 'region1'
+                    'all_common': 'region1',
+                    'my_custom_tag_r1': 'region1'
                 },
                 'DEFAULTS',
                 'region1'
@@ -974,7 +995,8 @@ class TestRun(PolicyGenTester):
                     'baz': 'blam',
                     'myAccount/common': 'c',
                     'all_r2': 'region2',
-                    'all_common': 'region2'
+                    'all_common': 'region2',
+                    'my_custom_tag_r2': 'region2'
                 },
                 'DEFAULTS',
                 'region2'
@@ -986,7 +1008,8 @@ class TestRun(PolicyGenTester):
                     'baz': 'blam',
                     'myAccount/common': 'c',
                     'all_r3': 'region3',
-                    'all_common': 'region3'
+                    'all_common': 'region3',
+                    'my_custom_tag_r3': 'region3'
                 },
                 'DEFAULTS',
                 'region3'
@@ -1002,21 +1025,24 @@ class TestRun(PolicyGenTester):
                             'baz': 'blam',
                             'myAccount/common': 'c',
                             'all_r1': 'region1',
-                            'all_common': 'region1'
+                            'all_common': 'region1',
+                            'my_custom_tag_r1': 'region1'
                         },
                         'region2': {
                             'foo': 'bar-myAccount/region2',
                             'baz': 'blam',
                             'myAccount/common': 'c',
                             'all_r2': 'region2',
-                            'all_common': 'region2'
+                            'all_common': 'region2',
+                            'my_custom_tag_r2': 'region2'
                         },
                         'region3': {
                             'foo': 'bar-myAccount/region3',
                             'baz': 'blam',
                             'myAccount/common': 'c',
                             'all_r3': 'region3',
-                            'all_common': 'region3'
+                            'all_common': 'region3',
+                            'my_custom_tag_r3': 'region3'
                         }
                     },
                     'otherAccount': {
@@ -1052,6 +1078,7 @@ class TestRun(PolicyGenTester):
         ]
         assert mocks['_load_defaults'].mock_calls == [call(self.cls)]
         assert mocks['_setup_mailer_templates'].mock_calls == [call(self.cls)]
+
 
     def test_no_defaults(self):
 
@@ -1462,6 +1489,17 @@ class TestLoadPolicy(PolicyGenTester):
                     'all_common': 'region3'
                 }
             },
+            "%smy_custom_tag" % prefix: {
+                'region1': {
+                    'my_custom_tag_r1': 'region1',
+                },
+                'region2': {
+                    'my_custom_tag_r2': 'region2',
+                },
+                'region3': {
+                    'my_custom_tag_r3': 'region3',
+                }
+            },
             "%sotherAccount" % prefix: {
                 'region1': {
                     'foo': 'bar-otherAccount/region1',
@@ -1495,6 +1533,7 @@ class TestLoadPolicy(PolicyGenTester):
             mocks['_read_policy_directory'].side_effect = se_read_pol_dir
             self.cls._load_policy()
         assert mocks['_read_policy_directory'].mock_calls == [
+            call(self.cls, 'my_custom_tag'),
             call(self.cls, 'all_accounts'),
             call(self.cls, 'myAccount'),
             call(self.cls, 'otherAccount')
@@ -1514,6 +1553,7 @@ class TestLoadPolicy(PolicyGenTester):
             mocks['_read_policy_directory'].side_effect = se_read_pol_dir
             self.cls._load_policy(path='foo')
         assert mocks['_read_policy_directory'].mock_calls == [
+            call(self.cls, 'foo/my_custom_tag'),
             call(self.cls, 'foo/all_accounts'),
             call(self.cls, 'foo/myAccount'),
             call(self.cls, 'foo/otherAccount')
