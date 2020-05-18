@@ -1,0 +1,22 @@
+pipeline:
+  docker:
+    <<: *docker
+    tags:
+      - ${DRONE_BRANCH}
+    when:
+      event: push
+      branch: 
+        exclude: master
+
+  docker:
+    <<: *docker
+    when:
+      event: push
+      branch: master
+
+anchors:
+  docker: &docker
+    image: plugins/docker
+    repo: quay.io/fundingcircle/${DRONE_REPO_NAME}
+    registry: https://quay.io
+    secrets: [docker_username, docker_password]
