@@ -75,3 +75,6 @@ mailer.yml
 .direnv/
 .envrc
 .vscode/
+
+# drone pipeline file
+.drone.yml
